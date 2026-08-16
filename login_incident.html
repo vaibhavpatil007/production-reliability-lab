@@ -1,0 +1,1903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Identity Authentication Incident Simulation</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family:
+        Inter,
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+
+    background:
+        radial-gradient(circle at 50% 50%, rgba(40, 80, 130, 0.08), transparent 40%),
+        #050a10;
+
+    color: #dbe7f5;
+}
+
+/* =========================================================
+   APP
+========================================================= */
+
+.app {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+
+    /*
+        FIX: allow scrolling instead of letting the diagram
+        squeeze/overlap when the viewport is narrower than
+        the diagram's designed minimum size.
+    */
+    overflow: auto;
+}
+
+/* =========================================================
+   BACKGROUND GRID
+========================================================= */
+
+.grid {
+    position: absolute;
+    inset: 0;
+
+    background-image:
+        linear-gradient(rgba(120, 160, 200, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(120, 160, 200, 0.045) 1px, transparent 1px);
+
+    background-size: 38px 38px;
+
+    mask-image: linear-gradient(
+        to bottom,
+        black 0%,
+        black 85%,
+        transparent 100%
+    );
+
+    /* Keep grid covering the full scrollable canvas, not just the viewport */
+    min-width: 1300px;
+    min-height: 620px;
+}
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+.header {
+    position: absolute;
+    top: 22px;
+    left: 24px;
+    z-index: 20;
+
+    font-size: 18px;
+    letter-spacing: 0.3px;
+    color: #a991df;
+}
+
+.header span {
+    color: #71839a;
+}
+
+/* =========================================================
+   SYSTEM AREA
+========================================================= */
+
+.system {
+    position: absolute;
+
+    /*
+        Fixed logical canvas.
+
+        Everything is positioned relative to this area.
+        FIX: give it a guaranteed minimum size so the
+        percentage-based card positions always have enough
+        room to fit the fixed-width cards without colliding.
+        If the actual viewport is smaller, .app scrolls
+        instead of squishing the layout.
+    */
+
+    left: 2%;
+    right: 2%;
+    top: 8%;
+    bottom: 7%;
+
+    min-width: 1300px;
+    min-height: 620px;
+}
+
+/* =========================================================
+   CARD
+========================================================= */
+
+.card {
+    position: absolute;
+
+    /* FIX: slightly narrower + re-spaced positions below
+       guarantee a safe gap between every card at the
+       .system minimum width. */
+    width: 210px;
+    min-height: 132px;
+
+    padding: 18px 20px;
+
+    background:
+        linear-gradient(
+            145deg,
+            rgba(11, 21, 33, 0.98),
+            rgba(6, 13, 21, 0.98)
+        );
+
+    border: 1px solid rgba(65, 96, 126, 0.65);
+
+    border-radius: 16px;
+
+    box-shadow:
+        0 0 0 1px rgba(255,255,255,0.015) inset,
+        0 20px 50px rgba(0,0,0,0.35);
+
+    transition:
+        border-color 0.35s ease,
+        box-shadow 0.35s ease,
+        transform 0.35s ease;
+}
+
+.card.healthy {
+    border-color: rgba(0, 220, 120, 0.8);
+
+    box-shadow:
+        0 0 25px rgba(0, 220, 120, 0.08),
+        0 20px 50px rgba(0,0,0,0.35);
+}
+
+.card.failed {
+    border-color: rgba(255, 75, 90, 0.9);
+
+    box-shadow:
+        0 0 30px rgba(255, 65, 80, 0.13),
+        0 20px 50px rgba(0,0,0,0.35);
+}
+
+/* =========================================================
+   CARD POSITIONS
+   FIX: re-spaced so that width(210px) never exceeds the
+   gap between consecutive left% values, even at the
+   .system minimum width of 1300px.
+========================================================= */
+
+/*
+    Main request path
+*/
+
+.user-card {
+    left: 2%;
+    top: 39%;
+}
+
+.web-card {
+    left: 23%;
+    top: 39%;
+}
+
+.auth-card {
+    left: 44%;
+    top: 39%;
+}
+
+/*
+    Sync hub is deliberately separated from Auth Service.
+*/
+
+.sync-hub {
+    position: absolute;
+
+    left: 64%;
+    top: 34%;
+
+    width: 170px;
+    height: 170px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    z-index: 8;
+}
+
+/*
+    Identity providers are vertically aligned.
+*/
+
+.central-card {
+    left: 80%;
+    top: 7%;
+}
+
+.regional-card {
+    left: 80%;
+    top: 70%;
+}
+
+/* =========================================================
+   CARD CONTENT
+========================================================= */
+
+.card-title {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.icon {
+    width: 36px;
+    height: 36px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 10px;
+
+    background: rgba(30, 55, 80, 0.45);
+
+    border: 1px solid rgba(100, 140, 180, 0.25);
+
+    font-size: 18px;
+}
+
+.subtitle {
+    margin-top: 13px;
+
+    font-family:
+        "SFMono-Regular",
+        Consolas,
+        monospace;
+
+    font-size: 11px;
+
+    color: #8293a8;
+}
+
+.status-row {
+    margin-top: 11px;
+
+    display: flex;
+    gap: 5px;
+
+    font-family:
+        "SFMono-Regular",
+        Consolas,
+        monospace;
+
+    font-size: 10px;
+
+    color: #8a9aae;
+}
+
+.status {
+    color: #00ed88;
+}
+
+.status.red {
+    color: #ff5869;
+}
+
+.status.yellow {
+    color: #ffc857;
+}
+
+/* =========================================================
+   SYNC HUB
+========================================================= */
+
+.sync-ring {
+    position: absolute;
+
+    width: 126px;
+    height: 126px;
+
+    border-radius: 50%;
+
+    border: 1px solid rgba(75, 110, 145, 0.8);
+
+    box-shadow:
+        0 0 0 14px rgba(20, 55, 85, 0.12),
+        0 0 0 1px rgba(80, 140, 190, 0.05) inset;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sync-ring::before {
+    content: "";
+
+    position: absolute;
+
+    inset: -18px;
+
+    border-radius: 50%;
+
+    border: 1px dashed rgba(40, 120, 170, 0.35);
+
+    animation: rotateRing 15s linear infinite;
+}
+
+.sync-icon {
+    width: 48px;
+    height: 48px;
+
+    border-radius: 12px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: 25px;
+
+    background:
+        linear-gradient(
+            145deg,
+            #4b9cff,
+            #5e7ff0
+        );
+
+    box-shadow:
+        0 0 25px rgba(70, 145, 255, 0.3);
+}
+
+.sync-label {
+    position: absolute;
+
+    top: 145px;
+
+    width: 180px;
+
+    text-align: center;
+
+    font-family:
+        "SFMono-Regular",
+        Consolas,
+        monospace;
+
+    font-size: 10px;
+
+    color: #8a9aae;
+
+    letter-spacing: 0.4px;
+}
+
+.sync-state {
+    display: block;
+
+    margin-top: 6px;
+
+    color: #00ed88;
+
+    font-weight: 700;
+}
+
+.sync-state.failed {
+    color: #ff5869;
+}
+
+@keyframes rotateRing {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* =========================================================
+   CONNECTION SVG
+========================================================= */
+
+.connections {
+    position: absolute;
+
+    inset: 0;
+
+    width: 100%;
+    height: 100%;
+
+    z-index: 2;
+
+    pointer-events: none;
+}
+
+.connection {
+    fill: none;
+
+    stroke: rgba(43, 105, 145, 0.48);
+
+    stroke-width: 1.2;
+}
+
+.connection.active {
+    stroke: rgba(60, 160, 220, 0.7);
+}
+
+.connection.failed {
+    stroke: rgba(255, 70, 80, 0.7);
+
+    stroke-dasharray: 5 7;
+}
+
+/* =========================================================
+   PACKETS
+========================================================= */
+
+.packet {
+    position: absolute;
+
+    width: 9px;
+    height: 9px;
+
+    border-radius: 50%;
+
+    background: #66c7ff;
+
+    box-shadow:
+        0 0 10px #66c7ff,
+        0 0 25px rgba(80, 190, 255, 0.65);
+
+    z-index: 10;
+
+    opacity: 0;
+
+    pointer-events: none;
+}
+
+.packet.auth {
+    background: #b28cff;
+
+    box-shadow:
+        0 0 10px #b28cff,
+        0 0 25px rgba(180, 130, 255, 0.65);
+}
+
+.packet.sync {
+    background: #00e890;
+
+    box-shadow:
+        0 0 10px #00e890,
+        0 0 25px rgba(0, 230, 140, 0.6);
+}
+
+/* =========================================================
+   INCIDENT BANNER
+========================================================= */
+
+.incident {
+    position: absolute;
+
+    left: 50%;
+    bottom: 28px;
+
+    transform: translateX(-50%);
+
+    min-width: 470px;
+
+    padding: 12px 18px;
+
+    border-radius: 10px;
+
+    background: rgba(10, 18, 28, 0.94);
+
+    border: 1px solid rgba(60, 90, 120, 0.65);
+
+    font-family:
+        "SFMono-Regular",
+        Consolas,
+        monospace;
+
+    font-size: 11px;
+
+    text-align: center;
+
+    z-index: 30;
+}
+
+.incident strong {
+    color: #00ed88;
+}
+
+.incident.failed strong {
+    color: #ff5869;
+}
+
+/* =========================================================
+   CONTROLS
+========================================================= */
+
+.controls {
+    position: absolute;
+
+    top: 18px;
+    right: 22px;
+
+    z-index: 40;
+
+    display: flex;
+    gap: 8px;
+}
+
+button {
+    border: 1px solid rgba(100, 130, 160, 0.4);
+
+    background: rgba(9, 18, 28, 0.9);
+
+    color: #cfe0f1;
+
+    padding: 9px 13px;
+
+    border-radius: 8px;
+
+    font-size: 11px;
+
+    cursor: pointer;
+
+    transition: 0.2s ease;
+
+    white-space: nowrap;
+}
+
+button:hover {
+    background: rgba(25, 43, 62, 0.95);
+
+    border-color: rgba(100, 170, 220, 0.65);
+}
+
+button.danger:hover {
+    border-color: rgba(255, 80, 90, 0.8);
+}
+
+button.success:hover {
+    border-color: rgba(0, 220, 130, 0.8);
+}
+
+/* =========================================================
+   EVENT LOG
+========================================================= */
+
+.log-panel {
+    position: absolute;
+
+    /*
+        FIX: moved from bottom-right (where it overlapped the
+        Regional Identity card) to top-left, under the header,
+        where the canvas has open space.
+    */
+    left: 24px;
+    top: 55px;
+
+    width: 420px;
+
+    max-height: 215px;
+
+    overflow: hidden;
+
+    padding: 14px;
+
+    background: rgba(5, 12, 19, 0.92);
+
+    border: 1px solid rgba(65, 95, 125, 0.5);
+
+    border-radius: 10px;
+
+    z-index: 35;
+
+    font-family:
+        "SFMono-Regular",
+        Consolas,
+        monospace;
+
+    /* FIX: bumped up from 9px for readability */
+    font-size: 12px;
+}
+
+.log-title {
+    color: #8498ae;
+
+    margin-bottom: 9px;
+
+    font-size: 12px;
+
+    letter-spacing: 0.5px;
+}
+
+.log-line {
+    margin: 6px 0;
+
+    color: #72879d;
+
+    line-height: 1.4;
+}
+
+.log-line.ok {
+    color: #00d982;
+}
+
+.log-line.error {
+    color: #ff6674;
+}
+
+.log-line.info {
+    color: #73b9ed;
+}
+
+/* =========================================================
+   FAILURE OVERLAY
+========================================================= */
+
+.failure-badge {
+    position: absolute;
+
+    /* FIX: re-centered above the sync hub's new position */
+    left: 70%;
+    top: 16%;
+
+    transform: translateX(-50%);
+
+    padding: 6px 10px;
+
+    border-radius: 7px;
+
+    background: rgba(70, 10, 20, 0.8);
+
+    border: 1px solid rgba(255, 75, 90, 0.7);
+
+    color: #ff6775;
+
+    font-family:
+        "SFMono-Regular",
+        Consolas,
+        monospace;
+
+    font-size: 9px;
+
+    opacity: 0;
+
+    transition: 0.3s;
+
+    z-index: 20;
+
+    white-space: nowrap;
+}
+
+.failure-badge.show {
+    opacity: 1;
+}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <div class="grid"></div>
+
+    <div class="header">
+        IDENTITY SYNC <span>/</span> REPLICATION
+    </div>
+
+    <!-- =====================================================
+         CONTROLS
+    ====================================================== -->
+
+    <div class="controls">
+
+        <button
+            onclick="sendRequest()"
+            id="requestBtn">
+            Send Login Request
+        </button>
+
+        <button
+            onclick="togglePause()"
+            id="pauseBtn">
+            Pause
+        </button>
+
+        <button
+            class="danger"
+            onclick="triggerIncident()">
+            Simulate Failure
+        </button>
+
+        <button
+            class="success"
+            onclick="restoreSync()">
+            Restore Sync
+        </button>
+
+    </div>
+
+    <!-- =====================================================
+         SYSTEM
+    ====================================================== -->
+
+    <div class="system">
+
+        <!-- =================================================
+             CONNECTIONS
+             FIX: coordinates recalculated (viewBox units =
+             percent * 10 for x, percent * 7 for y) to match
+             the new card positions/widths exactly.
+        ================================================== -->
+
+        <svg
+            class="connections"
+            viewBox="0 0 1000 700"
+            preserveAspectRatio="none">
+
+            <!-- User → Web -->
+            <path
+                id="lineUserWeb"
+                class="connection active"
+                d="M 182 365 L 230 365" />
+
+            <!-- Web → Auth -->
+            <path
+                id="lineWebAuth"
+                class="connection active"
+                d="M 392 365 L 440 365" />
+
+            <!-- Auth → Sync -->
+            <path
+                id="lineAuthSync"
+                class="connection active"
+                d="M 602 365 L 640 365" />
+
+            <!-- Sync → Central -->
+            <path
+                id="lineSyncCentral"
+                class="connection active"
+                d="M 771 365
+                   L 790 365
+                   L 790 130
+                   L 800 130" />
+
+            <!-- Sync → Regional -->
+            <path
+                id="lineSyncRegional"
+                class="connection active"
+                d="M 771 365
+                   L 790 365
+                   L 790 555
+                   L 800 555" />
+
+        </svg>
+
+
+        <!-- =================================================
+             USER
+        ================================================== -->
+
+        <div
+            class="card user-card healthy"
+            id="userCard">
+
+            <div class="card-title">
+
+                <div class="icon">👤</div>
+
+                <div>User</div>
+
+            </div>
+
+            <div class="subtitle">
+                Browser / Client
+            </div>
+
+            <div class="status-row">
+                LOGIN REQUEST:
+                <span
+                    class="status"
+                    id="userStatus">
+                    READY
+                </span>
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             WEB APPLICATION
+        ================================================== -->
+
+        <div
+            class="card web-card healthy"
+            id="webCard">
+
+            <div class="card-title">
+
+                <div class="icon">🌐</div>
+
+                <div>Web Application</div>
+
+            </div>
+
+            <div class="subtitle">
+                POST /api/login
+            </div>
+
+            <div class="status-row">
+                FRONTEND:
+                <span
+                    class="status"
+                    id="webStatus">
+                    READY
+                </span>
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             AUTH SERVICE
+        ================================================== -->
+
+        <div
+            class="card auth-card healthy"
+            id="authCard">
+
+            <div class="card-title">
+
+                <div class="icon">🔐</div>
+
+                <div>Auth Service</div>
+
+            </div>
+
+            <div class="subtitle">
+                Authentication API
+            </div>
+
+            <div class="status-row">
+                SERVICE:
+                <span
+                    class="status"
+                    id="authStatus">
+                    HEALTHY
+                </span>
+            </div>
+
+            <div class="status-row">
+                DEPENDENCY:
+                <span
+                    class="status"
+                    id="dependencyStatus">
+                    HEALTHY
+                </span>
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             SYNC HUB
+        ================================================== -->
+
+        <div
+            class="sync-hub"
+            id="syncHub">
+
+            <div class="sync-ring">
+
+                <div class="sync-icon">
+                    🔄
+                </div>
+
+            </div>
+
+            <div class="sync-label">
+
+                IDENTITY SYNC
+
+                <span
+                    class="sync-state"
+                    id="syncState">
+                    SYNC RESTORED
+                </span>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             CENTRAL IDENTITY
+        ================================================== -->
+
+        <div
+            class="card central-card healthy"
+            id="centralCard">
+
+            <div class="card-title">
+
+                <div class="icon">🏢</div>
+
+                <div>Central Identity</div>
+
+            </div>
+
+            <div class="subtitle">
+                Global Identity Provider
+            </div>
+
+            <div class="status-row">
+                DIRECTORY:
+                <span
+                    class="status"
+                    id="centralDirectory">
+                    SYNCED
+                </span>
+            </div>
+
+            <div class="status-row">
+                SERVICE:
+                <span
+                    class="status"
+                    id="centralService">
+                    AVAILABLE
+                </span>
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             REGIONAL IDENTITY
+        ================================================== -->
+
+        <div
+            class="card regional-card healthy"
+            id="regionalCard">
+
+            <div class="card-title">
+
+                <div class="icon">🏬</div>
+
+                <div>Regional Identity</div>
+
+            </div>
+
+            <div class="subtitle">
+                Regional Identity Provider
+            </div>
+
+            <div class="status-row">
+                DIRECTORY:
+                <span
+                    class="status"
+                    id="regionalDirectory">
+                    SYNCED
+                </span>
+            </div>
+
+            <div class="status-row">
+                REPLICATION:
+                <span
+                    class="status"
+                    id="regionalReplication">
+                    ACTIVE
+                </span>
+            </div>
+
+            <div class="status-row">
+                HEARTBEAT:
+                <span
+                    class="status"
+                    id="regionalHeartbeat">
+                    OK
+                </span>
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             FAILURE BADGE
+        ================================================== -->
+
+        <div
+            class="failure-badge"
+            id="failureBadge">
+
+            ⚠ REPLICATION DEGRADED
+
+        </div>
+
+
+        <!-- =================================================
+             ANIMATED PACKETS
+        ================================================== -->
+
+        <div
+            class="packet"
+            id="packet1">
+        </div>
+
+        <div
+            class="packet auth"
+            id="packet2">
+        </div>
+
+        <div
+            class="packet sync"
+            id="packet3">
+        </div>
+
+
+        <!-- =================================================
+             INCIDENT MESSAGE
+        ================================================== -->
+
+        <div
+            class="incident"
+            id="incident">
+
+            SYSTEM STATUS:
+            <strong id="incidentText">
+                Authentication flow healthy
+            </strong>
+
+        </div>
+
+
+        <!-- =================================================
+             EVENT LOG
+        ================================================== -->
+
+        <div class="log-panel">
+
+            <div class="log-title">
+                LIVE INCIDENT LOG
+            </div>
+
+            <div
+                id="logs">
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<script>
+
+/* =========================================================
+   STATE
+========================================================= */
+
+let syncHealthy = true;
+
+let paused = false;
+
+let requestRunning = false;
+
+
+/* =========================================================
+   ELEMENTS
+========================================================= */
+
+const userCard =
+    document.getElementById("userCard");
+
+const webCard =
+    document.getElementById("webCard");
+
+const authCard =
+    document.getElementById("authCard");
+
+const centralCard =
+    document.getElementById("centralCard");
+
+const regionalCard =
+    document.getElementById("regionalCard");
+
+const syncState =
+    document.getElementById("syncState");
+
+const incident =
+    document.getElementById("incident");
+
+const incidentText =
+    document.getElementById("incidentText");
+
+const failureBadge =
+    document.getElementById("failureBadge");
+
+const logs =
+    document.getElementById("logs");
+
+
+/* =========================================================
+   LOGGING
+========================================================= */
+
+function log(message, type = "info") {
+
+    const line =
+        document.createElement("div");
+
+    line.className =
+        "log-line " + type;
+
+    const time =
+        new Date()
+            .toLocaleTimeString();
+
+    line.innerText =
+        `[${time}] ${message}`;
+
+    logs.prepend(line);
+
+    while (logs.children.length > 7) {
+        logs.removeChild(logs.lastChild);
+    }
+}
+
+
+/* =========================================================
+   STATUS HELPERS
+========================================================= */
+
+function setStatus(elementId, text, type = "green") {
+
+    const element =
+        document.getElementById(elementId);
+
+    element.innerText = text;
+
+    element.classList.remove(
+        "red",
+        "yellow"
+    );
+
+    if (type === "red") {
+        element.classList.add("red");
+    }
+
+    if (type === "yellow") {
+        element.classList.add("yellow");
+    }
+}
+
+
+/* =========================================================
+   FAILURE
+========================================================= */
+
+function triggerIncident() {
+
+    syncHealthy = false;
+
+    /* Central identity */
+
+    centralCard.classList.remove("healthy");
+
+    centralCard.classList.add("failed");
+
+    setStatus(
+        "centralDirectory",
+        "STALE",
+        "red"
+    );
+
+    setStatus(
+        "centralService",
+        "AVAILABLE",
+        "yellow"
+    );
+
+
+    /* Regional identity */
+
+    regionalCard.classList.remove("healthy");
+
+    regionalCard.classList.add("failed");
+
+    setStatus(
+        "regionalDirectory",
+        "OUT OF SYNC",
+        "red"
+    );
+
+    setStatus(
+        "regionalReplication",
+        "DEGRADED",
+        "red"
+    );
+
+    setStatus(
+        "regionalHeartbeat",
+        "WARNING",
+        "yellow"
+    );
+
+
+    /* Sync layer */
+
+    syncState.innerText =
+        "SYNC FAILED";
+
+    syncState.classList.add("failed");
+
+    failureBadge.classList.add("show");
+
+
+    /* Auth service */
+
+    setStatus(
+        "dependencyStatus",
+        "UNAVAILABLE",
+        "red"
+    );
+
+
+    document
+        .getElementById("lineSyncCentral")
+        .classList.add("failed");
+
+    document
+        .getElementById("lineSyncRegional")
+        .classList.add("failed");
+
+
+    incident.classList.add("failed");
+
+    incidentText.innerText =
+        "Identity synchronization degraded";
+
+
+    log(
+        "Identity replication heartbeat lost",
+        "error"
+    );
+
+    log(
+        "Central / Regional directory state diverged",
+        "error"
+    );
+
+    log(
+        "Authentication dependency unavailable",
+        "error"
+    );
+
+}
+
+
+/* =========================================================
+   RESTORE
+========================================================= */
+
+function restoreSync() {
+
+    syncHealthy = true;
+
+    centralCard.classList.remove("failed");
+
+    centralCard.classList.add("healthy");
+
+    regionalCard.classList.remove("failed");
+
+    regionalCard.classList.add("healthy");
+
+
+    setStatus(
+        "centralDirectory",
+        "SYNCED"
+    );
+
+    setStatus(
+        "centralService",
+        "AVAILABLE"
+    );
+
+    setStatus(
+        "regionalDirectory",
+        "SYNCED"
+    );
+
+    setStatus(
+        "regionalReplication",
+        "ACTIVE"
+    );
+
+    setStatus(
+        "regionalHeartbeat",
+        "OK"
+    );
+
+    setStatus(
+        "dependencyStatus",
+        "HEALTHY"
+    );
+
+
+    syncState.innerText =
+        "SYNC RESTORED";
+
+    syncState.classList.remove(
+        "failed"
+    );
+
+    failureBadge.classList.remove(
+        "show"
+    );
+
+
+    document
+        .getElementById("lineSyncCentral")
+        .classList.remove("failed");
+
+    document
+        .getElementById("lineSyncRegional")
+        .classList.remove("failed");
+
+
+    incident.classList.remove("failed");
+
+    incidentText.innerText =
+        "Authentication flow healthy";
+
+
+    log(
+        "Replication channel restored",
+        "ok"
+    );
+
+    log(
+        "Directory state synchronized",
+        "ok"
+    );
+
+    log(
+        "Authentication dependency healthy",
+        "ok"
+    );
+
+}
+
+
+/* =========================================================
+   PAUSE / RESUME
+========================================================= */
+
+function togglePause() {
+
+    paused = !paused;
+
+    const button =
+        document.getElementById(
+            "pauseBtn"
+        );
+
+    if (paused) {
+
+        button.innerText =
+            "Resume";
+
+        document
+            .querySelectorAll(".packet")
+            .forEach(packet => {
+                packet.style.animationPlayState =
+                    "paused";
+            });
+
+        log(
+            "Request animation paused",
+            "info"
+        );
+
+    } else {
+
+        button.innerText =
+            "Pause";
+
+        document
+            .querySelectorAll(".packet")
+            .forEach(packet => {
+                packet.style.animationPlayState =
+                    "running";
+            });
+
+        log(
+            "Request animation resumed",
+            "info"
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   PACKET ANIMATION
+========================================================= */
+
+function animatePacket(
+    packet,
+    from,
+    to,
+    duration,
+    callback
+) {
+
+    if (paused) {
+        return;
+    }
+
+    packet.style.left =
+        from.x + "%";
+
+    packet.style.top =
+        from.y + "%";
+
+    packet.style.opacity = "1";
+
+
+    const start =
+        performance.now();
+
+
+    function frame(now) {
+
+        if (paused) {
+
+            requestAnimationFrame(frame);
+
+            return;
+        }
+
+
+        const progress =
+            Math.min(
+                (now - start) / duration,
+                1
+            );
+
+
+        const x =
+            from.x +
+            (to.x - from.x) *
+            progress;
+
+        const y =
+            from.y +
+            (to.y - from.y) *
+            progress;
+
+
+        packet.style.left =
+            x + "%";
+
+        packet.style.top =
+            y + "%";
+
+
+        if (progress < 1) {
+
+            requestAnimationFrame(
+                frame
+            );
+
+        } else {
+
+            packet.style.opacity =
+                "0";
+
+            if (callback) {
+                callback();
+            }
+
+        }
+
+    }
+
+
+    requestAnimationFrame(frame);
+}
+
+
+/* =========================================================
+   LOGIN REQUEST
+   FIX: packet x/y coordinates below re-aligned to match
+   the corrected card/connector positions above.
+========================================================= */
+
+function sendRequest() {
+
+    if (requestRunning) {
+        return;
+    }
+
+    requestRunning = true;
+
+
+    log(
+        "POST /api/login received",
+        "info"
+    );
+
+
+    setStatus(
+        "userStatus",
+        "SENDING"
+    );
+
+    setStatus(
+        "webStatus",
+        "PROCESSING"
+    );
+
+
+    const packet1 =
+        document.getElementById(
+            "packet1"
+        );
+
+
+    /*
+        User → Web
+    */
+
+    animatePacket(
+        packet1,
+        {
+            x: 18,
+            y: 52
+        },
+        {
+            x: 23,
+            y: 52
+        },
+        700,
+        () => {
+
+            log(
+                "Web application received login request",
+                "info"
+            );
+
+
+            setStatus(
+                "webStatus",
+                "FORWARDING"
+            );
+
+
+            /*
+                Web → Auth
+            */
+
+            animatePacket(
+                packet1,
+                {
+                    x: 39,
+                    y: 52
+                },
+                {
+                    x: 44,
+                    y: 52
+                },
+                800,
+                () => {
+
+                    log(
+                        "Auth Service received credentials",
+                        "info"
+                    );
+
+
+                    setStatus(
+                        "authStatus",
+                        "VALIDATING"
+                    );
+
+
+                    /*
+                        Auth → Identity Sync
+                    */
+
+                    const packet2 =
+                        document.getElementById(
+                            "packet2"
+                        );
+
+
+                    animatePacket(
+                        packet2,
+                        {
+                            x: 60,
+                            y: 52
+                        },
+                        {
+                            x: 64,
+                            y: 52
+                        },
+                        600,
+                        () => {
+
+                            processAuthentication();
+
+                        }
+                    );
+
+                }
+            );
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   AUTHENTICATION PROCESS
+========================================================= */
+
+function processAuthentication() {
+
+    if (!syncHealthy) {
+
+        /*
+            FAILURE PATH
+        */
+
+        setStatus(
+            "authStatus",
+            "FAILED",
+            "red"
+        );
+
+        setStatus(
+            "dependencyStatus",
+            "HTTP 503",
+            "red"
+        );
+
+        setStatus(
+            "webStatus",
+            "HTTP 500",
+            "red"
+        );
+
+        setStatus(
+            "userStatus",
+            "NETWORK ERROR",
+            "red"
+        );
+
+
+        incident.classList.add(
+            "failed"
+        );
+
+        incidentText.innerText =
+            "Login failed — identity dependency unavailable";
+
+
+        log(
+            "Identity provider request failed",
+            "error"
+        );
+
+        log(
+            "Auth Service dependency response: 503",
+            "error"
+        );
+
+        log(
+            "Web API returned HTTP 500",
+            "error"
+        );
+
+        log(
+            "Browser displayed generic Network Error",
+            "error"
+        );
+
+
+        requestRunning = false;
+
+        return;
+
+    }
+
+
+    /*
+        HEALTHY PATH
+    */
+
+    setStatus(
+        "authStatus",
+        "AUTHENTICATING"
+    );
+
+
+    const packet3 =
+        document.getElementById(
+            "packet3"
+        );
+
+
+    /*
+        Sync → Central
+    */
+
+    animatePacket(
+        packet3,
+        {
+            x: 70,
+            y: 50
+        },
+        {
+            x: 80,
+            y: 19
+        },
+        850,
+        () => {
+
+            log(
+                "Central Identity verified directory state",
+                "ok"
+            );
+
+
+            /*
+                Central → Regional
+                synchronization confirmation
+            */
+
+            animatePacket(
+                packet3,
+                {
+                    x: 80,
+                    y: 19
+                },
+                {
+                    x: 80,
+                    y: 79
+                },
+                900,
+                () => {
+
+                    completeLogin();
+
+                }
+            );
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   SUCCESS
+========================================================= */
+
+function completeLogin() {
+
+    setStatus(
+        "authStatus",
+        "AUTHENTICATED"
+    );
+
+    setStatus(
+        "dependencyStatus",
+        "HEALTHY"
+    );
+
+    setStatus(
+        "webStatus",
+        "HTTP 200"
+    );
+
+    setStatus(
+        "userStatus",
+        "LOGIN SUCCESS"
+    );
+
+
+    incident.classList.remove(
+        "failed"
+    );
+
+    incidentText.innerText =
+        "Login successful — identity dependency healthy";
+
+
+    log(
+        "Identity verification successful",
+        "ok"
+    );
+
+    log(
+        "Auth Service issued successful response",
+        "ok"
+    );
+
+    log(
+        "Web application returned HTTP 200",
+        "ok"
+    );
+
+    log(
+        "User session established",
+        "ok"
+    );
+
+
+    requestRunning = false;
+
+}
+
+
+/* =========================================================
+   INITIAL STATE
+========================================================= */
+
+log(
+    "Authentication infrastructure initialized",
+    "ok"
+);
+
+log(
+    "Central Identity: SYNCED",
+    "ok"
+);
+
+log(
+    "Regional Identity: SYNCED",
+    "ok"
+);
+
+log(
+    "Auth Service dependency: HEALTHY",
+    "ok"
+);
+
+
+/* =========================================================
+   AUTOMATIC DEMO
+========================================================= */
+
+setTimeout(() => {
+
+    sendRequest();
+
+}, 1800);
+
+</script>
+
+</body>
+</html>
